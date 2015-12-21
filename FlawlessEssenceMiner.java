@@ -89,6 +89,14 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                                             return Objects.find(20, "Rune Essence").length == 0; //until we are teleported to the mine
                                         }
                                     }, General.random(4000, 8000));
+                                } else if (DynamicClicking.clickRSNPC(portal[0], "Use")) {
+	                                Timing.waitCondition(new Condition() {
+	                                    @Override
+	                                    public boolean active() { //it will loop this
+	                                        General.sleep(100, 200);
+	                                        return Objects.find(20, "Rune Essence").length == 0; //until we are teleported to the mine
+	                                    }
+	                                }, General.random(4000, 8000));
                                 }
                     		} else {
                     			WebWalking.walkTo(portal[0].getPosition());
