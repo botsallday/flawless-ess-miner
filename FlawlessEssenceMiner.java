@@ -16,7 +16,6 @@ import org.tribot.api.types.generic.Condition;
 import org.tribot.api.DynamicClicking;
 import org.tribot.script.interfaces.Painting;
 import org.tribot.api2007.Player;
-import org.tribot.api2007.Walking;
 
 import java.awt.RenderingHints;
 import org.tribot.api.util.ABCUtil;
@@ -30,10 +29,7 @@ import java.awt.Font;
 import java.awt.Graphics; 
 import java.awt.Graphics2D; 
 import java.awt.Image;
-import java.io.IOException;
-import java.net.URL;
 
-import javax.imageio.ImageIO; 
 
 @ScriptManifest(authors = {"botsallday"}, category = "Money Making", name = "FlawlessEssenceMiner")
 
@@ -41,7 +37,8 @@ public class FlawlessEssenceMiner extends Script implements Painting {
     
     // set variables
 	private ABCUtil abc = new ABCUtil();
-    private final Image img = getImage("");
+	private GUI gui = new GUI();
+    private final Image img = null;
     private boolean has_pic = false;
     private static final long startTime = System.currentTimeMillis();
     private int essence_mined = 0;
@@ -53,6 +50,14 @@ public class FlawlessEssenceMiner extends Script implements Painting {
 
     private final RSArea bank_area = new RSArea(new RSTile(3253, 3420, 0), new RSTile(3250, 3422, 0));
     private final RSArea teleport_area = new RSArea(new RSTile(3252, 3401, 0), new RSTile(3254, 3402, 0));
+    
+    public boolean inventoryIsEmpty() {
+    	if (Inventory.getAll().length > 0) {
+    		return false;
+    	}
+    	
+    	return true;
+    }
     
     public RSTile getTile(boolean use_bank) {
     	// check run since we are about to walk
@@ -67,8 +72,24 @@ public class FlawlessEssenceMiner extends Script implements Painting {
     	return teleport_area.getRandomTile();
     }
     
+    public Object getPickaxe() {
+    	return gui.getPicaxeValue();
+    }
+    
     public void run() {
     	General.useAntiBanCompliance(true);
+    	gui.setVisible(true);
+    	execute = false;
+    	while (gui.getWaitGui()){
+    		General.sleep(100, 150);
+    		println("Sleeping for gui");
+    	}
+    	
+    	println("Gui loaded");
+    	
+    	execute = true;
+    	
+    	gui.setVisible(false);
     	
         while(execute) {
             State state = state();
@@ -141,11 +162,12 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                     case WALKING:
                     	log("Walking...");
                     	handleWait();
+                		General.sleep(1500, 7500);
                     	break;
                     case ANTI_BAN:
                     	log("Mining essence, checking antiban");
                     	handleWait();
-                    	General.sleep(100, 1200);
+                		General.sleep(1500, 7500);
                     	break;
                     case SOMETHING_WENT_WRONG:
                     	log("Stopping script, something went wrong");
@@ -161,7 +183,7 @@ public class FlawlessEssenceMiner extends Script implements Painting {
         // whether or not we need to bank is the variable that drives the script
         RSNPC[] portals = NPCs.getAll();
         
-        if (Inventory.find("Bronze pickaxe").length > 0) {
+        if (Inventory.find(gui.getPicaxeValue()).length > 0) {
         	has_pic = true;
         } else {
         	has_pic = false;
@@ -278,7 +300,7 @@ public class FlawlessEssenceMiner extends Script implements Painting {
 
 	        // if we deposited any items, print the number
 	        if (items_deposited > 0) {
-	        	if (Inventory.find("Bronze pickaxe").length == 0) {
+	        	if (Inventory.find(gui.getPicaxeValue()).length == 0) {
 	        		getPic();
 	        		General.sleep(100, 640);
 	        	}
@@ -295,12 +317,12 @@ public class FlawlessEssenceMiner extends Script implements Painting {
     }
     
     private void getPic() {
-    	RSItem[] pic = Banking.find("Bronze pickaxe");
+    	RSItem[] pic = Banking.find(gui.getPicaxeValue());
     	
     	if (Banking.openBank()) {
     		if (pic.length > 0) {
-    			if (!Inventory.isFull() && Inventory.find("Bronze pickaxe").length == 0) {
-    				Banking.withdraw(1, "Bronze pickaxe");
+    			if (!Inventory.isFull() && Inventory.find(gui.getPicaxeValue()).length == 0) {
+    				Banking.withdraw(1, gui.getPicaxeValue());
     			} else {
     				depositAll();
     			}
@@ -359,15 +381,6 @@ public class FlawlessEssenceMiner extends Script implements Painting {
         g.drawString("Ess Per Hour: "+ ess_per_hour, 330, 435);
     }
 
-    private Image getImage(String url) {
-        // get paint image
-        try {
-            return ImageIO.read(new URL(url));
-        } catch(IOException e) {
-            return null;
-        }
-    }
-    
     private void checkRun() {
     	final int run_energy = Game.getRunEnergy();
     	if (run_energy >= abc.INT_TRACKER.NEXT_RUN_AT.next() && !Game.isRunOn()) {
@@ -379,9 +392,9 @@ public class FlawlessEssenceMiner extends Script implements Painting {
     
     private void handleWait() {
     	log("Checking timer based anti-ban");
-    	while (Player.isMoving()) {
+    	while (Player.isMoving() || Player.getAnimation() != -1) {
     		// control cpu usage
-    		General.sleep(50, 1200);
+    		General.sleep(1000, 1500);
     		
     		if (System.currentTimeMillis() >= abc.TIME_TRACKER.EXAMINE_OBJECT.next()) {
     			log("Examine object antiban");
