@@ -89,7 +89,7 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                                             return Objects.find(20, "Rune Essence").length == 0; //until we are teleported to the mine
                                         }
                                     }, General.random(4000, 8000));
-                                } else if (DynamicClicking.clickRSNPC(portal[0], "Use")) {
+                                } else if (DynamicClicking.clickRSNPC(portal[0], "Exit")) {
 	                                Timing.waitCondition(new Condition() {
 	                                    @Override
 	                                    public boolean active() { //it will loop this
@@ -114,7 +114,9 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                     	break;
                     case WALK_TO_BANK:
                     	log("Walking to bank");
-                        handleBanking();
+                        if (!handleBanking()) {
+                        	walk(true);
+                        };
                         break;
                     case GET_PIC:
                     	log("Attempting to get a pickaxe");
@@ -182,6 +184,7 @@ public class FlawlessEssenceMiner extends Script implements Painting {
              if (Banking.isInBank()) {
                  return State.DEPOSIT_ITEMS;
              } else {
+            	 handleWait();
                  return State.WALK_TO_BANK;
              }
         } else if (has_pic && !Inventory.isFull() && !Banking.isBankScreenOpen() && !Player.isMoving() && Objects.findNearest(20, "Rune Essence").length > 0 && Player.getAnimation() == -1) {
