@@ -16,12 +16,9 @@ import org.tribot.api.types.generic.Condition;
 import org.tribot.api.DynamicClicking;
 import org.tribot.script.interfaces.Painting;
 import org.tribot.api2007.Player;
-import org.tribot.api2007.GameTab;
-import org.tribot.api2007.Walking;
+import org.tribot.api2007.Camera;
 
 import java.awt.RenderingHints;
-import org.tribot.api.util.ABCUtil;
-import org.tribot.api2007.Game;
 import org.tribot.api2007.NPCs;
 import org.tribot.api2007.types.RSItem;
 
@@ -30,7 +27,6 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics; 
 import java.awt.Graphics2D; 
-import java.awt.Image;
 
 
 @ScriptManifest(authors = {"botsallday"}, category = "Money Making", name = "FlawlessEssenceMiner")
@@ -38,9 +34,9 @@ import java.awt.Image;
 public class FlawlessEssenceMiner extends Script implements Painting {
     
     // set variables
-	private ABCUtil abc = new ABCUtil();
+	private AntiBan anti_ban = new AntiBan();
+	private Transportation transport = new Transportation();
 	private GUI gui = new GUI();
-    private final Image img = null;
     private boolean has_pic = false;
     private static final long startTime = System.currentTimeMillis();
     private int essence_mined = 0;
@@ -49,7 +45,6 @@ public class FlawlessEssenceMiner extends Script implements Painting {
     private boolean execute = true;
     private final RenderingHints aa = new RenderingHints(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     Font font = new Font("Verdana", Font.BOLD, 14);
-    private String antiban_status = "Waiting";
 
     private final RSArea bank_area = new RSArea(new RSTile(3253, 3420, 0), new RSTile(3250, 3422, 0));
     private final RSArea teleport_area = new RSArea(new RSTile(3252, 3401, 0), new RSTile(3254, 3402, 0));
@@ -60,19 +55,6 @@ public class FlawlessEssenceMiner extends Script implements Painting {
     	}
     	
     	return true;
-    }
-    
-    public RSTile getTile(boolean use_bank) {
-    	// check run since we are about to walk
-    	checkRun();
-    	General.sleep(400, 1500);
-    	
-    	if (use_bank) {
-    		return bank_area.getRandomTile();
-    		
-    	} 
-    	
-    	return teleport_area.getRandomTile();
     }
     
     public Object getPickaxe() {
@@ -109,7 +91,7 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                     	
                     	log("Walking to portal to leave ess mine");
                     	if (portal.length > 0) {
-                    		if (portal[0].isOnScreen()) {
+                    		if (portal[0].isOnScreen() && portal[0].isClickable()) {
                     			if (DynamicClicking.clickRSNPC(portal[0], "Use")) {
                                     Timing.waitCondition(new Condition() {
                                         @Override
@@ -128,7 +110,10 @@ public class FlawlessEssenceMiner extends Script implements Painting {
 	                                }, General.random(4000, 8000));
                                 }
                     		} else {
-                    			WebWalking.walkTo(portal[0].getPosition());
+                    			if (transport.validateWalk(portal[0].getPosition(), true)) {
+                            		Camera.turnToTile(portal[0].getPosition());
+                    				WebWalking.walkTo(portal[0].getPosition());
+                    			}
                     		}
                     	}
                     	break;
@@ -136,17 +121,24 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                     	log("Walking to rocks to mine ess");
                     	final RSObject[] rocks = Objects.findNearest(30, "Rune Essence");
                     	
-                    	if (!tryWebWalkToRock() && rocks.length > 0) {
-                    		println("Failed to webwalk to rock, trying blind walk");
-                    		if (rocks[0].isOnScreen()) {
-                        		Walking.blindWalkTo(rocks[0].getPosition());
-                    		}
-                    	};
+                    	if (rocks.length > 0) {
+                    		Condition closeToRocks = new Condition() {
+                                @Override
+                                public boolean active() {
+                                    General.sleep(100, 200);
+                                    println("Searching for rocks");
+                                    println(Objects.findNearest(6, "Rune Essence").length > 0);
+                                    return Objects.findNearest(6, "Rune Essence").length > 0;
+                                }
+                            };
+                            
+                    		WebWalking.walkTo(rocks[0].getPosition(), closeToRocks, 500);
+                    	}
                     	break;
                     case WALK_TO_BANK:
                     	log("Walking to bank");
                     	println("About to go");
-                    	WebWalking.walkTo(getTile(true));
+                    	WebWalking.walkTo(transport.getTile(bank_area, true));
                         break;
                     case GET_PIC:
                     	log("Attempting to get a pickaxe");
@@ -160,12 +152,10 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                         mineRock(target_rock);
                         break;
                     case WALKING:
-                    	handleWait();
-                		General.sleep(1500, 7500);
+                    	anti_ban.handleWalkingTimeout();
                     	break;
                     case ANTI_BAN:
-                    	handleWait();
-                		General.sleep(200, 800);
+                    	anti_ban.handleWait();
                     	break;
                     case SOMETHING_WENT_WRONG:
                     	log("Stopping script, something went wrong");
@@ -173,63 +163,52 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                     	break;
                 }
             }
-            General.sleep(892,  2134);
+            // control cpu usage
+            General.sleep(100,  250);
         }
-    }
-    
-    private boolean tryWebWalkToRock() {
-    	final RSObject[] rocks = Objects.findNearest(30, "Rune Essence");
-    	
-    	if (rocks.length > 1 && abc.BOOL_TRACKER.USE_CLOSEST.next()) {
-    		if ((rocks[1].getPosition().distanceToDouble(Player.getPosition()) - rocks[0].getPosition().distanceTo(Player.getPosition())) < 5) {
-            	abc.BOOL_TRACKER.USE_CLOSEST.reset();
-    			return WebWalking.walkTo(rocks[1].getPosition());
-    		}
-    	} else if (rocks.length > 0) {
-    		return WebWalking.walkTo(rocks[0].getPosition());
-    	}
-    	
-    	return false;
     }
 
     private State state() {
-        // whether or not we need to bank is the variable that drives the script
         RSNPC[] portals = NPCs.getAll();
-        
+        // cache whether or not we have a pickaxe
         if (Inventory.find(gui.getPicaxeValue()).length > 0) {
         	has_pic = true;
         } else {
         	has_pic = false;
         }
-        
+        // determine how much ess we have mined
         if (Inventory.find("Rune Essence", "Pure Essence").length > 0) {
         	if (Inventory.getCount("Rune Essence", "Pure Essence") > current_ess) {
         		current_ess = Inventory.getCount("Rune Essence", "Pure Essence");
         		essence_mined ++;
         	};
         }
-        
+        // set state
         if (Inventory.isFull() && !Banking.isBankScreenOpen() && !Player.isMoving() && Objects.findNearest(20, "Rune Essence").length == 0) {
              if (Banking.isInBank()) {
                  return State.DEPOSIT_ITEMS;
              } else {
-            	 handleWait();
                  return State.WALK_TO_BANK;
              }
         } else if (has_pic && !Inventory.isFull() && !Banking.isBankScreenOpen() && !Player.isMoving() && Objects.findNearest(20, "Rune Essence").length > 0 && Player.getAnimation() == -1) {
-            RSObject[] nearest_rock = Objects.findNearest(3, "Rune Essence");
+            RSObject[] nearest_rock = Objects.findNearest(7, "Rune Essence");
+            
 
             if (nearest_rock.length > 0) {
+            	
+            	if (!nearest_rock[0].isOnScreen()) {
+            		Camera.turnToTile(nearest_rock[0].getPosition());
+            	}
             	target_rock = nearest_rock[0];
             	// anti ban compliance
-                if (nearest_rock.length > 1 && this.abc.BOOL_TRACKER.USE_CLOSEST.next()) {
+                if (nearest_rock.length > 1 && this.anti_ban.abc.BOOL_TRACKER.USE_CLOSEST.next() && transport.validateWalk(nearest_rock[1].getPosition(), true)) {
                     if (nearest_rock[1].getPosition().distanceToDouble(nearest_rock[0]) < 3.0)
                         target_rock = nearest_rock[1];
                 }
                 
-                if (abc.BOOL_TRACKER.HOVER_NEXT.next()) {
-                	target_rock.hover();
-                }
+//                if (anti_ban.abc.BOOL_TRACKER.HOVER_NEXT.next()) {
+//                	target_rock.hover();
+//                }
                 
                 return State.MINE_ROCKS;
             }  else {
@@ -239,7 +218,6 @@ public class FlawlessEssenceMiner extends Script implements Painting {
         	return State.WALKING;
         } else if (has_pic && !Player.isMoving() && Objects.findNearest(20, "Rune Essence").length == 0) {
         	log("No essence in range");
-        	println(Objects.findNearest(20, "Rune Essence"));
         	return State.WALK_TO_TELEPORT;
         } else if (Inventory.isFull() && !Player.isMoving() && !Banking.isBankScreenOpen() && portals.length > 0) {
         	return State.WALK_TO_PORTAL;
@@ -277,11 +255,13 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                Timing.waitCondition(new Condition() {
                    @Override
                    public boolean active() { //it will loop this
-                       General.sleep(100, 200);
+                       General.sleep(100);
                        return Objects.find(20, "Rune Essence").length > 0; //until we are teleported to the mine
                    }
-               }, General.random(4000, 8000));
+               }, General.random(5000, 8000));
            }
+	   } else if (npc.length > 0 && !npc[0].isOnScreen()) {
+		   Camera.turnToTile(npc[0].getPosition());
 	   }
 	   
 	   return false;
@@ -291,13 +271,13 @@ public class FlawlessEssenceMiner extends Script implements Painting {
 		RSNPC[] npc = NPCs.find("Aubury");
 
 		log("Searching for harry potter");
-		if (npc.length > 0 && npc[0].getPosition().distanceToDouble(Player.getPosition()) > 4) {
+		if (npc.length > 0 && npc[0].getPosition().distanceToDouble(Player.getPosition()) > 5 && transport.validateWalk(npc[0].getPosition(), true)) {
 			log("Walking to harry potters");
 			return WebWalking.walkTo(npc[0].getPosition());
 		} else if (npc.length > 0) {
 			return true;
-		} else {
-			WebWalking.walkTo(getTile(false));
+		} else if (transport.validateWalk(transport.getTile(teleport_area, false), false)) {
+			WebWalking.walkTo(transport.getTile(teleport_area, true));
 		}
 		
 		return false;
@@ -306,25 +286,46 @@ public class FlawlessEssenceMiner extends Script implements Painting {
    
     private boolean depositAll() {
     	if (Inventory.isFull()) {
-	        int items_deposited = Banking.depositAll();
-        	General.sleep(845, 3558);
-
-	        // if we deposited any items, print the number
-	        if (items_deposited > 0) {
+	        if (Banking.depositAll() > 0) {
+	        	// condition for waiting until items are deposited
+	        	Timing.waitCondition(new Condition() {
+                    @Override
+                    public boolean active() {
+                    	// control cpu usage
+                        General.sleep(300, 600);
+                        // ensure we have deposited items
+                        return !Inventory.isFull();
+                    }
+                }, General.random(1000, 2500));
+	        	// get pickaxe if needed
 	        	if (Inventory.find(gui.getPicaxeValue()).length == 0) {
 	        		getPic();
-	        		General.sleep(100, 640);
 	        	}
+	        	// condition to wait for getting the pick
+	        	Timing.waitCondition(new Condition() {
+                    @Override
+                    public boolean active() {
+                    	// control cpu usage
+                        General.sleep(100, 200);
+                        // ensure we have deposited items
+                        return Inventory.find(gui.getPicaxeValue()).length > 0;
+                    }
+                }, General.random(500, 1550));
+	        	// update variables
 	        	current_ess = 0;
-	            log("Deposited "+ items_deposited +" items.");
-	            // close bank
-	            closeBankScreen();
+	            log("Deposited items");
+	            
+	            // since we are walking around actually closing the screen isn't required
+	            if (General.random(1, 5) >= 3) {
+	            	closeBankScreen();
+	            }
+	            
+	            return true;
+	            
 	        }
-        
-	        return true;
-    	} else {
-    		return false;
     	}
+    	
+    	return false;
     }
     
     private void getPic() {
@@ -362,12 +363,19 @@ public class FlawlessEssenceMiner extends Script implements Painting {
     private void mineRock(RSObject rock) {
     	if (!Inventory.isFull()) {
 	        if (rock.isOnScreen() && rock.isClickable()) {
-	        	DynamicClicking.clickRSObject(rock, "mine");
-	            
-	            abc.BOOL_TRACKER.HOVER_NEXT.reset();
-	            abc.BOOL_TRACKER.USE_CLOSEST.reset();
-	            // item interaction delay
-	            General.sleep(abc.DELAY_TRACKER.ITEM_INTERACTION.next());
+	        	if (DynamicClicking.clickRSObject(rock, "mine")) {
+		        	Timing.waitCondition(new Condition() {
+	                    @Override
+	                    public boolean active() {
+	                    	// control cpu usage
+	                        General.sleep(100, 200);
+	                        // ensure we have deposited items
+	                        return Player.getAnimation() > -1;
+	                    }
+	                }, General.random(4000, 10000));
+	        	}
+	            anti_ban.abc.BOOL_TRACKER.HOVER_NEXT.reset();
+	            anti_ban.abc.BOOL_TRACKER.USE_CLOSEST.reset();
 	        }
     	}
     }
@@ -380,7 +388,6 @@ public class FlawlessEssenceMiner extends Script implements Painting {
         // setup image
         Graphics2D gg = (Graphics2D)g;
         gg.setRenderingHints(aa);
-        gg.drawImage(img, 0, 338, null);
         // set variables for display
         long run_time = System.currentTimeMillis() - startTime;
         int ess_per_hour = (int)(essence_mined * 3600000 / run_time);
@@ -390,109 +397,8 @@ public class FlawlessEssenceMiner extends Script implements Painting {
         g.drawString("Runtime: " + Timing.msToString(run_time), 330, 395);
         g.drawString("Ess Mined: " + essence_mined, 330, 415);
         g.drawString("Ess Per Hour: "+ ess_per_hour, 330, 435);
-        g.drawString("Antiban Status: "+antiban_status, 330, 375);
+        g.drawString("Antiban Status: "+anti_ban.antiban_status, 330, 375);
+        g.drawString("Antiban Status: "+anti_ban.antiban_status, 330, 375);
+        
     }
-
-    private void checkRun() {
-    	final int run_energy = Game.getRunEnergy();
-    	if (run_energy >= abc.INT_TRACKER.NEXT_RUN_AT.next() && !Game.isRunOn()) {
-    		log("Turning run on");
-    		WebWalking.setUseRun(true);
-    		abc.INT_TRACKER.NEXT_RUN_AT.reset();
-    	}
-    }
-    
-    private boolean performTabAntiBan(long next, GameTab.TABS tab) {
-    	
-		if (System.currentTimeMillis() >= next && GameTab.getOpen() != tab) {
-			log("Performing check tab anti ban");
-			if (GameTab.open(tab)) {
-				antiban_status = "Performing antiban action";
-				log("Successfully performed check tab "+"("+tab+") antiban");
-				return true;
-			};
-			
-			return true;
-		}
-			
-		return false;
-		
-    }
-    
-    private void handleWait() {
-    	antiban_status = "Checking";
-    	
-    	if (Player.isMoving() || Player.getAnimation() != -1 && General.random(1, 100) >= 98) {
-    		antiban_status = "Performing antiban action";
-    		// control cpu usage
-            switch (General.random(1, 5)) {
-	            case 1:
-	                if (performTabAntiBan(abc.TIME_TRACKER.CHECK_EQUIPMENT.next(), GameTab.TABS.EQUIPMENT)) {
-	                    abc.TIME_TRACKER.CHECK_EQUIPMENT.reset();
-	                };
-	                break;
-	            case 2:
-	
-	                if (performTabAntiBan(abc.TIME_TRACKER.CHECK_FRIENDS.next(), GameTab.TABS.FRIENDS)) {
-	                    abc.TIME_TRACKER.CHECK_FRIENDS.reset();
-	                };
-	                break;
-	
-	            case 3:
-	
-	                if (performTabAntiBan(abc.TIME_TRACKER.CHECK_COMBAT.next(), GameTab.TABS.COMBAT)) {
-	                    abc.TIME_TRACKER.CHECK_COMBAT.reset();
-	                };
-	                break;
-	
-	            case 4:
-	
-	                if (performTabAntiBan(abc.TIME_TRACKER.CHECK_MUSIC.next(), GameTab.TABS.MUSIC)) {
-	                    abc.TIME_TRACKER.CHECK_MUSIC.reset();
-	                };
-	                break;
-	
-	            case 5:
-	
-	                if (performTabAntiBan(abc.TIME_TRACKER.CHECK_QUESTS.next(), GameTab.TABS.QUESTS)) {
-	                    abc.TIME_TRACKER.CHECK_QUESTS.reset();
-	                };
-	                break;
-	        }
-    	} else if (General.random(1, 100) > 50) {
-            if (System.currentTimeMillis() >= abc.TIME_TRACKER.EXAMINE_OBJECT.next()) {
-    			log("Examine object antiban");
-    			abc.performExamineObject();
-    		}
-
-            if (System.currentTimeMillis() >= abc.TIME_TRACKER.ROTATE_CAMERA.next()) {
-                log("Performing rotate camera anti ban");
-                abc.performRotateCamera();
-            }
-
-            if (System.currentTimeMillis() >= abc.TIME_TRACKER.PICKUP_MOUSE.next()) {
-                log("Performing pickup mouse anti ban");
-                abc.performPickupMouse();
-            }
-
-            if (System.currentTimeMillis() >= abc.TIME_TRACKER.LEAVE_GAME.next()) {
-                log("Performing mouse leave game anti ban");
-                abc.performLeaveGame();
-            }
-
-            if (System.currentTimeMillis() >= abc.TIME_TRACKER.RANDOM_MOUSE_MOVEMENT.next()) {
-                log("Performing mouse movement anti ban");
-                abc.performRandomMouseMovement();
-            }
-
-            if (System.currentTimeMillis() >= abc.TIME_TRACKER.RANDOM_MOUSE_MOVEMENT.next()) {
-                log("Performing mouse right click anti ban");
-                abc.performRandomRightClick();
-            }
-    	}
-    	
-    	antiban_status = "Waiting";
-    }
-
-
 }
