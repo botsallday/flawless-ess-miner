@@ -16,6 +16,8 @@ import org.tribot.api.types.generic.Condition;
 import org.tribot.api.DynamicClicking;
 import org.tribot.script.interfaces.Painting;
 import org.tribot.api2007.Player;
+import org.tribot.api2007.GameTab;
+import org.tribot.api2007.Walking;
 
 import java.awt.RenderingHints;
 import org.tribot.api.util.ABCUtil;
@@ -47,6 +49,7 @@ public class FlawlessEssenceMiner extends Script implements Painting {
     private boolean execute = true;
     private final RenderingHints aa = new RenderingHints(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     Font font = new Font("Verdana", Font.BOLD, 14);
+    private String antiban_status = "Waiting";
 
     private final RSArea bank_area = new RSArea(new RSTile(3253, 3420, 0), new RSTile(3250, 3422, 0));
     private final RSArea teleport_area = new RSArea(new RSTile(3252, 3401, 0), new RSTile(3254, 3402, 0));
@@ -133,14 +136,12 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                     	log("Walking to rocks to mine ess");
                     	final RSObject[] rocks = Objects.findNearest(30, "Rune Essence");
                     	
-                    	if (rocks.length > 1 && abc.BOOL_TRACKER.USE_CLOSEST.next()) {
-                    		if ((rocks[1].getPosition().distanceToDouble(Player.getPosition()) - rocks[0].getPosition().distanceTo(Player.getPosition())) < 10) {
-                				WebWalking.walkTo(rocks[1].getPosition());
-                            	abc.BOOL_TRACKER.USE_CLOSEST.reset();
+                    	if (!tryWebWalkToRock() && rocks.length > 0) {
+                    		println("Failed to webwalk to rock, trying blind walk");
+                    		if (rocks[0].isOnScreen()) {
+                        		Walking.blindWalkTo(rocks[0].getPosition());
                     		}
-                    	} else if (rocks.length > 0) {
-                    		WebWalking.walkTo(rocks[0].getPosition());
-                    	}
+                    	};
                     	break;
                     case WALK_TO_BANK:
                     	log("Walking to bank");
@@ -156,18 +157,15 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                         handleBanking();
                         break;
                     case MINE_ROCKS:
-                    	log("Mining ess");
                         mineRock(target_rock);
                         break;
                     case WALKING:
-                    	log("Walking...");
                     	handleWait();
                 		General.sleep(1500, 7500);
                     	break;
                     case ANTI_BAN:
-                    	log("Mining essence, checking antiban");
                     	handleWait();
-                		General.sleep(1500, 7500);
+                		General.sleep(200, 800);
                     	break;
                     case SOMETHING_WENT_WRONG:
                     	log("Stopping script, something went wrong");
@@ -177,6 +175,21 @@ public class FlawlessEssenceMiner extends Script implements Painting {
             }
             General.sleep(892,  2134);
         }
+    }
+    
+    private boolean tryWebWalkToRock() {
+    	final RSObject[] rocks = Objects.findNearest(30, "Rune Essence");
+    	
+    	if (rocks.length > 1 && abc.BOOL_TRACKER.USE_CLOSEST.next()) {
+    		if ((rocks[1].getPosition().distanceToDouble(Player.getPosition()) - rocks[0].getPosition().distanceTo(Player.getPosition())) < 5) {
+            	abc.BOOL_TRACKER.USE_CLOSEST.reset();
+    			return WebWalking.walkTo(rocks[1].getPosition());
+    		}
+    	} else if (rocks.length > 0) {
+    		return WebWalking.walkTo(rocks[0].getPosition());
+    	}
+    	
+    	return false;
     }
 
     private State state() {
@@ -195,8 +208,6 @@ public class FlawlessEssenceMiner extends Script implements Painting {
         		essence_mined ++;
         	};
         }
-        println("has pick?");
-        println(has_pic);
         
         if (Inventory.isFull() && !Banking.isBankScreenOpen() && !Player.isMoving() && Objects.findNearest(20, "Rune Essence").length == 0) {
              if (Banking.isInBank()) {
@@ -280,7 +291,7 @@ public class FlawlessEssenceMiner extends Script implements Painting {
 		RSNPC[] npc = NPCs.find("Aubury");
 
 		log("Searching for harry potter");
-		if (npc.length > 0 && npc[0].getPosition().distanceToDouble(Player.getPosition()) > 3) {
+		if (npc.length > 0 && npc[0].getPosition().distanceToDouble(Player.getPosition()) > 4) {
 			log("Walking to harry potters");
 			return WebWalking.walkTo(npc[0].getPosition());
 		} else if (npc.length > 0) {
@@ -351,7 +362,7 @@ public class FlawlessEssenceMiner extends Script implements Painting {
     private void mineRock(RSObject rock) {
     	if (!Inventory.isFull()) {
 	        if (rock.isOnScreen() && rock.isClickable()) {
-	            rock.click("mine");
+	        	DynamicClicking.clickRSObject(rock, "mine");
 	            
 	            abc.BOOL_TRACKER.HOVER_NEXT.reset();
 	            abc.BOOL_TRACKER.USE_CLOSEST.reset();
@@ -379,6 +390,7 @@ public class FlawlessEssenceMiner extends Script implements Painting {
         g.drawString("Runtime: " + Timing.msToString(run_time), 330, 395);
         g.drawString("Ess Mined: " + essence_mined, 330, 415);
         g.drawString("Ess Per Hour: "+ ess_per_hour, 330, 435);
+        g.drawString("Antiban Status: "+antiban_status, 330, 375);
     }
 
     private void checkRun() {
@@ -390,78 +402,96 @@ public class FlawlessEssenceMiner extends Script implements Painting {
     	}
     }
     
+    private boolean performTabAntiBan(long next, GameTab.TABS tab) {
+    	
+		if (System.currentTimeMillis() >= next && GameTab.getOpen() != tab) {
+			log("Performing check tab anti ban");
+			if (GameTab.open(tab)) {
+				antiban_status = "Performing antiban action";
+				log("Successfully performed check tab "+"("+tab+") antiban");
+				return true;
+			};
+			
+			return true;
+		}
+			
+		return false;
+		
+    }
+    
     private void handleWait() {
-    	log("Checking timer based anti-ban");
-    	while (Player.isMoving() || Player.getAnimation() != -1) {
+    	antiban_status = "Checking";
+    	
+    	if (Player.isMoving() || Player.getAnimation() != -1 && General.random(1, 100) >= 98) {
+    		antiban_status = "Performing antiban action";
     		// control cpu usage
-    		General.sleep(1000, 1500);
-    		
-    		if (System.currentTimeMillis() >= abc.TIME_TRACKER.EXAMINE_OBJECT.next()) {
+            switch (General.random(1, 5)) {
+	            case 1:
+	                if (performTabAntiBan(abc.TIME_TRACKER.CHECK_EQUIPMENT.next(), GameTab.TABS.EQUIPMENT)) {
+	                    abc.TIME_TRACKER.CHECK_EQUIPMENT.reset();
+	                };
+	                break;
+	            case 2:
+	
+	                if (performTabAntiBan(abc.TIME_TRACKER.CHECK_FRIENDS.next(), GameTab.TABS.FRIENDS)) {
+	                    abc.TIME_TRACKER.CHECK_FRIENDS.reset();
+	                };
+	                break;
+	
+	            case 3:
+	
+	                if (performTabAntiBan(abc.TIME_TRACKER.CHECK_COMBAT.next(), GameTab.TABS.COMBAT)) {
+	                    abc.TIME_TRACKER.CHECK_COMBAT.reset();
+	                };
+	                break;
+	
+	            case 4:
+	
+	                if (performTabAntiBan(abc.TIME_TRACKER.CHECK_MUSIC.next(), GameTab.TABS.MUSIC)) {
+	                    abc.TIME_TRACKER.CHECK_MUSIC.reset();
+	                };
+	                break;
+	
+	            case 5:
+	
+	                if (performTabAntiBan(abc.TIME_TRACKER.CHECK_QUESTS.next(), GameTab.TABS.QUESTS)) {
+	                    abc.TIME_TRACKER.CHECK_QUESTS.reset();
+	                };
+	                break;
+	        }
+    	} else if (General.random(1, 100) > 50) {
+            if (System.currentTimeMillis() >= abc.TIME_TRACKER.EXAMINE_OBJECT.next()) {
     			log("Examine object antiban");
     			abc.performExamineObject();
-    			return;
     		}
-    		
-    		if (System.currentTimeMillis() >= abc.TIME_TRACKER.ROTATE_CAMERA.next()) {
-    			log("Performing rotate camera anti ban");
-    			abc.performRotateCamera();
-    			return;
-    		}
-    		
-    		if (System.currentTimeMillis() >= abc.TIME_TRACKER.PICKUP_MOUSE.next()) {
-    			log("Performing pickup mouse anti ban");
-    			abc.performPickupMouse();
-    			return;
-    		}
-    		
-    		if (System.currentTimeMillis() >= abc.TIME_TRACKER.LEAVE_GAME.next()) {
-    			log("Performing mouse leave game anti ban");
-    			abc.performLeaveGame();
-    			return;
-    		}
-    		
-    		if (System.currentTimeMillis() >= abc.TIME_TRACKER.RANDOM_MOUSE_MOVEMENT.next()) {
-    			log("Performing mouse movement anti ban");
-    			abc.performRandomMouseMovement();
-    			return;
-    		}
-    		
-    		if (System.currentTimeMillis() >= abc.TIME_TRACKER.RANDOM_MOUSE_MOVEMENT.next()) {
-    			log("Performing mouse right click anti ban");
-    			abc.performRandomRightClick();
-    			return;
-    		}
-    		
-    		if (System.currentTimeMillis() >= abc.TIME_TRACKER.CHECK_EQUIPMENT.next()) {
-    			log("Performing equipment check anti ban");
-    			abc.performEquipmentCheck();
-    			return;
-    		}
-    		
-    		if (System.currentTimeMillis() >= abc.TIME_TRACKER.CHECK_FRIENDS.next()) {
-    			log("Performing check friends anti ban");
-    			abc.performFriendsCheck();
-    			return;
-    		}
-    		
-    		if (System.currentTimeMillis() >= abc.TIME_TRACKER.CHECK_COMBAT.next()) {
-    			log("Performing check combat anti ban");
-    			abc.performCombatCheck();
-    			return;
-    		}
-    		
-    		if (System.currentTimeMillis() >= abc.TIME_TRACKER.CHECK_MUSIC.next()) {
-    			log("Performing check music anti ban");
-    			abc.performMusicCheck();
-    			return;
-    		}
-    		
-    		if (System.currentTimeMillis() >= abc.TIME_TRACKER.CHECK_QUESTS.next()) {
-    			log("Performing check quests anti ban");
-    			abc.performQuestsCheck();
-    			return;
-    		}
+
+            if (System.currentTimeMillis() >= abc.TIME_TRACKER.ROTATE_CAMERA.next()) {
+                log("Performing rotate camera anti ban");
+                abc.performRotateCamera();
+            }
+
+            if (System.currentTimeMillis() >= abc.TIME_TRACKER.PICKUP_MOUSE.next()) {
+                log("Performing pickup mouse anti ban");
+                abc.performPickupMouse();
+            }
+
+            if (System.currentTimeMillis() >= abc.TIME_TRACKER.LEAVE_GAME.next()) {
+                log("Performing mouse leave game anti ban");
+                abc.performLeaveGame();
+            }
+
+            if (System.currentTimeMillis() >= abc.TIME_TRACKER.RANDOM_MOUSE_MOVEMENT.next()) {
+                log("Performing mouse movement anti ban");
+                abc.performRandomMouseMovement();
+            }
+
+            if (System.currentTimeMillis() >= abc.TIME_TRACKER.RANDOM_MOUSE_MOVEMENT.next()) {
+                log("Performing mouse right click anti ban");
+                abc.performRandomRightClick();
+            }
     	}
+    	
+    	antiban_status = "Waiting";
     }
 
 
