@@ -10,15 +10,25 @@ import org.tribot.api.General;
 import org.tribot.api2007.Banking;
 import org.tribot.api2007.Inventory;
 import org.tribot.api2007.Objects;
+import org.tribot.api2007.PathFinding;
 import org.tribot.api2007.WebWalking;
 import org.tribot.api.Timing;
 import org.tribot.api.types.generic.Condition;
 import org.tribot.api.DynamicClicking;
 import org.tribot.script.interfaces.Painting;
 import org.tribot.api2007.Player;
+import org.tribot.api2007.Skills;
+import org.tribot.api2007.Walking;
 import org.tribot.api2007.Camera;
+import org.tribot.api2007.ext.Filters;
+import org.tribot.api2007.ext.Filters.GroundItems;
 
 import java.awt.RenderingHints;
+import java.io.IOException;
+import java.net.URL;
+
+import javax.imageio.ImageIO;
+
 import org.tribot.api2007.NPCs;
 import org.tribot.api2007.types.RSItem;
 
@@ -26,16 +36,18 @@ import org.tribot.api2007.types.RSItem;
 import java.awt.Color; 
 import java.awt.Font;
 import java.awt.Graphics; 
-import java.awt.Graphics2D; 
+import java.awt.Graphics2D;
+import java.awt.Image; 
 
 
 @ScriptManifest(authors = {"botsallday"}, category = "Money Making", name = "FlawlessEssenceMiner")
 
 public class FlawlessEssenceMiner extends Script implements Painting {
-    
+    private final Image img = getImage("http://s27.postimg.org/6qf9rmh8z/paint_miner_ess.png");
     // set variables
 	private AntiBan anti_ban = new AntiBan();
 	private Transportation transport = new Transportation();
+	private Banker banker = new Banker();
 	private GUI gui = new GUI();
     private boolean has_pic = false;
     private static final long startTime = System.currentTimeMillis();
@@ -46,9 +58,9 @@ public class FlawlessEssenceMiner extends Script implements Painting {
     private final RenderingHints aa = new RenderingHints(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     Font font = new Font("Verdana", Font.BOLD, 14);
 
-    private final RSArea bank_area = new RSArea(new RSTile(3253, 3420, 0), new RSTile(3250, 3422, 0));
+    private final RSArea bank_area = new RSArea(new RSTile(3251, 3420, 0), new RSTile(3254, 3422, 0));
     private final RSArea teleport_area = new RSArea(new RSTile(3252, 3401, 0), new RSTile(3254, 3402, 0));
-    
+    private final RSTile exit_shop_tile = new RSTile(3253, 3498, 0);
     public boolean inventoryIsEmpty() {
     	if (Inventory.getAll().length > 0) {
     		return false;
@@ -75,8 +87,10 @@ public class FlawlessEssenceMiner extends Script implements Painting {
     	execute = true;
     	
     	gui.setVisible(false);
+    	anti_ban.setHoverSkill(Skills.SKILLS.MINING);
     	
         while(execute) {
+        	
             State state = state();
             if (state != null) {
                 switch (state) {
@@ -111,6 +125,7 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                                 }
                     		} else {
                     			if (transport.validateWalk(portal[0].getPosition(), true)) {
+                    				println("DOOMED");
                             		Camera.turnToTile(portal[0].getPosition());
                     				WebWalking.walkTo(portal[0].getPosition());
                     			}
@@ -119,26 +134,52 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                     	break;
                     case WALK_TO_ROCKS:
                     	log("Walking to rocks to mine ess");
-                    	final RSObject[] rocks = Objects.findNearest(30, "Rune Essence");
-                    	
+                    	final RSObject[] rocks = Objects.findNearest(20, Filters.Objects.actionsContains("Mine"));
+                    	RSNPC[] portals = NPCs.getAll();
+
                     	if (rocks.length > 0) {
+                    		println("first one");
                     		Condition closeToRocks = new Condition() {
                                 @Override
                                 public boolean active() {
-                                    General.sleep(100, 200);
-                                    println("Searching for rocks");
-                                    println(Objects.findNearest(6, "Rune Essence").length > 0);
-                                    return Objects.findNearest(6, "Rune Essence").length > 0;
+                                    General.sleep(100);
+                                    return Objects.findNearest(7, Filters.Objects.actionsContains("Mine")).length > 0;
                                 }
                             };
                             
-                    		WebWalking.walkTo(rocks[0].getPosition(), closeToRocks, 500);
+                    		if (transport.walkCustomNavPath(portals[0].getPosition())) {
+                    			General.sleep(1000);
+                    			println("Won");
+                    		} else {
+                    			if (Walking.walkPath(transport.nav().findPath(20), closeToRocks, 500)) {
+                    				println(" Found a win");
+                    			} else {
+                    				println("Another fail");
+                    			}
+                    		};
+                    	} else {
+                    		println("Second one");
+                    		if (Walking.walkPath(transport.nav().findPath(5))) {
+                    			General.sleep(1000);
+                    			println("Win");
+                    		} else {
+                    			println("Fail");
+                    		}
                     	}
                     	break;
                     case WALK_TO_BANK:
                     	log("Walking to bank");
-                    	println("About to go");
-                    	WebWalking.walkTo(transport.getTile(bank_area, true));
+                    	if (transport.walkCustomNavPath(bank_area.getRandomTile())) {
+                    		println("Banking works");
+                    		banker.handleBanking(bank_area, true);
+                    	} else {
+                    		println("Banking fails");
+                    	}
+                    	
+//                    	if (Walking.walkPath(PathFinding.generatePath(Player.getPosition(), bank_area.getRandomTile(), false))) {
+//                    		println("The path worked!");
+//                    	};
+//                    	banker.handleBanking(bank_area, true);
                         break;
                     case GET_PIC:
                     	log("Attempting to get a pickaxe");
@@ -146,13 +187,13 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                     	break;
                     case DEPOSIT_ITEMS:
                     	log("Depositing items in bank");
-                        handleBanking();
+                        depositAll();
                         break;
                     case MINE_ROCKS:
                         mineRock(target_rock);
                         break;
                     case WALKING:
-                    	anti_ban.handleWalkingTimeout();
+                    	anti_ban.handleWait();
                     	break;
                     case ANTI_BAN:
                     	anti_ban.handleWait();
@@ -184,14 +225,14 @@ public class FlawlessEssenceMiner extends Script implements Painting {
         	};
         }
         // set state
-        if (Inventory.isFull() && !Banking.isBankScreenOpen() && !Player.isMoving() && Objects.findNearest(20, "Rune Essence").length == 0) {
-             if (Banking.isInBank()) {
+        if (Inventory.isFull() && !Player.isMoving() && Objects.findNearest(20, "Rune Essence").length == 0) {
+             if (Banking.isInBank() && Banking.isBankScreenOpen()) {
                  return State.DEPOSIT_ITEMS;
-             } else {
+             } else if (!Banking.isBankScreenOpen()) {
                  return State.WALK_TO_BANK;
              }
         } else if (has_pic && !Inventory.isFull() && !Banking.isBankScreenOpen() && !Player.isMoving() && Objects.findNearest(20, "Rune Essence").length > 0 && Player.getAnimation() == -1) {
-            RSObject[] nearest_rock = Objects.findNearest(7, "Rune Essence");
+            RSObject[] nearest_rock = Objects.findNearest(9, "Rune Essence");
             
 
             if (nearest_rock.length > 0) {
@@ -205,10 +246,6 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                     if (nearest_rock[1].getPosition().distanceToDouble(nearest_rock[0]) < 3.0)
                         target_rock = nearest_rock[1];
                 }
-                
-//                if (anti_ban.abc.BOOL_TRACKER.HOVER_NEXT.next()) {
-//                	target_rock.hover();
-//                }
                 
                 return State.MINE_ROCKS;
             }  else {
@@ -286,17 +323,7 @@ public class FlawlessEssenceMiner extends Script implements Painting {
    
     private boolean depositAll() {
     	if (Inventory.isFull()) {
-	        if (Banking.depositAll() > 0) {
-	        	// condition for waiting until items are deposited
-	        	Timing.waitCondition(new Condition() {
-                    @Override
-                    public boolean active() {
-                    	// control cpu usage
-                        General.sleep(300, 600);
-                        // ensure we have deposited items
-                        return !Inventory.isFull();
-                    }
-                }, General.random(1000, 2500));
+    		if (banker.depositAllBut(gui.getPicaxeValue())) {
 	        	// get pickaxe if needed
 	        	if (Inventory.find(gui.getPicaxeValue()).length == 0) {
 	        		getPic();
@@ -341,19 +368,7 @@ public class FlawlessEssenceMiner extends Script implements Painting {
     		}
     	}
     }
-    
-    private boolean handleBanking() {
-        // we know we are in the bank, so try to open bank screen
-        boolean bank_screen_is_open = Banking.openBank();
-        println("Banking");
-        if (bank_screen_is_open) {
-        	println("Banking its open");
-            return depositAll();
-        }
-        
-        return false;
-    }
-
+   
     private void closeBankScreen() {
         if (Banking.isBankScreenOpen()) {
             Banking.close();
@@ -362,6 +377,9 @@ public class FlawlessEssenceMiner extends Script implements Painting {
 
     private void mineRock(RSObject rock) {
     	if (!Inventory.isFull()) {
+    		if (!rock.isOnScreen()) {
+    			Camera.turnToTile(rock);
+    		}
 	        if (rock.isOnScreen() && rock.isClickable()) {
 	        	if (DynamicClicking.clickRSObject(rock, "mine")) {
 		        	Timing.waitCondition(new Condition() {
@@ -370,7 +388,7 @@ public class FlawlessEssenceMiner extends Script implements Painting {
 	                    	// control cpu usage
 	                        General.sleep(100, 200);
 	                        // ensure we have deposited items
-	                        return Player.getAnimation() > -1;
+	                        return Player.getAnimation() > -1 && !Player.isMoving();
 	                    }
 	                }, General.random(4000, 10000));
 	        	}
@@ -386,19 +404,29 @@ public class FlawlessEssenceMiner extends Script implements Painting {
 
     public void onPaint(Graphics g) {
         // setup image
+        // setup image
         Graphics2D gg = (Graphics2D)g;
         gg.setRenderingHints(aa);
+        gg.drawImage(img, 0, 338, null);
         // set variables for display
         long run_time = System.currentTimeMillis() - startTime;
         int ess_per_hour = (int)(essence_mined * 3600000 / run_time);
     
         g.setFont(font);
-        g.setColor(new Color(200, 100, 20));
-        g.drawString("Runtime: " + Timing.msToString(run_time), 330, 395);
-        g.drawString("Ess Mined: " + essence_mined, 330, 415);
-        g.drawString("Ess Per Hour: "+ ess_per_hour, 330, 435);
-        g.drawString("Antiban Status: "+anti_ban.antiban_status, 330, 375);
-        g.drawString("Antiban Status: "+anti_ban.antiban_status, 330, 375);
-        
+        g.setColor(new Color(0, 0, 0));
+        g.drawString("" + Timing.msToString(run_time), 95, 393);
+        g.drawString("" + essence_mined, 141, 417);
+        g.drawString(""+ ess_per_hour, 160, 440);
+        g.drawString(""+(essence_mined*13), 80, 463);
+
+    }
+    
+    private Image getImage(String url) {
+        // get paint image
+        try {
+            return ImageIO.read(new URL(url));
+        } catch(IOException e) {
+            return null;
+        }
     }
 }

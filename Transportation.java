@@ -1,5 +1,7 @@
 package scripts;
 
+import org.tribot.api.General;
+import org.tribot.api2007.Camera;
 import org.tribot.api2007.Game;
 import org.tribot.api2007.NPCs;
 import org.tribot.api2007.Objects;
@@ -11,6 +13,7 @@ import org.tribot.api2007.types.RSArea;
 import org.tribot.api2007.types.RSNPC;
 import org.tribot.api2007.types.RSObject;
 import org.tribot.api2007.types.RSTile;
+import org.tribot.api2007.util.DPathNavigator;
 
 public class Transportation {
 	
@@ -21,7 +24,7 @@ public class Transportation {
 		anti_ban = new AntiBan();
 	}
 	
-    private void checkRun() {
+    public void checkRun() {
     	if (Game.getRunEnergy() >= anti_ban.abc.INT_TRACKER.NEXT_RUN_AT.next() && !Game.isRunOn()) {
     		System.out.println("Turning run on");
     		WebWalking.setUseRun(true);
@@ -66,6 +69,21 @@ public class Transportation {
         
         return false;
     }
+	
+	public void iteratePath(RSTile[] path) {
+		General.println("Printing Path");
+		for (int i=0; i<path.length; i++) {
+			General.println(path[i].toString());
+		}
+	}
+	
+	public DPathNavigator nav() {
+		return new DPathNavigator();
+	}
+	
+	public boolean walkCustomNavPath(RSTile end) {
+		return Walking.walkPath(nav().findPath(end));
+	}
     
     public boolean webWalkToObject(String object_name) {
         final RSObject[] obj = Objects.findNearest(30, object_name);
@@ -100,4 +118,49 @@ public class Transportation {
     	return PathFinding.canReach(Player.getPosition(), end, true);
     }
     
+	public boolean dpathnavWalk(RSTile end) {
+		final DPathNavigator nav = new DPathNavigator();
+		return nav.traverse(end);
+	}
+	
+	public boolean webWalking(RSTile end) {
+		return WebWalking.walkTo(end);
+	}
+	
+	public boolean normalWalk(RSTile end) {
+		return Walking.walkTo(end);
+	}
+	
+	public boolean walkScreenPath(RSTile[] path) {
+		return Walking.walkScreenPath(path);
+	}
+	
+	public RSTile[] generateScreenPath(RSTile end, boolean walk_it) {
+		if (walk_it) {
+			walkScreenPath(Walking.generateStraightScreenPath(end));
+		}
+		
+		return Walking.generateStraightScreenPath(end);
+	}
+	
+	public boolean clickScreenTile(RSTile tile) {
+		if (tile.isOnScreen()) {
+			return Walking.clickTileMS(tile, 0);
+		}
+		
+		return false;
+	}
+	
+	public boolean clickMinimapTile(RSTile tile) {
+		if (tile.isOnScreen()) {
+			return Walking.clickTileMM(tile, 0);
+		}
+		
+		return false;
+	}
+	
+	public boolean rotateCameraAndWalkToTile(RSTile tile) {
+		Camera.turnToTile(tile);
+		return webWalking(tile);
+	}
 }

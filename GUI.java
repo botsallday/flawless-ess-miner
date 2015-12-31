@@ -87,4 +87,5 @@ public class GUI extends javax.swing.JFrame {
     private boolean waitGui = true;
     // End of variables declaration                   
 
+
 }

@@ -1,28 +1,57 @@
 package scripts;
 
 import org.tribot.api.General;
+import org.tribot.api.Timing;
+import org.tribot.api.types.generic.Condition;
 import org.tribot.api.util.ABCUtil;
 import org.tribot.api2007.GameTab;
 import org.tribot.api2007.Player;
+import org.tribot.api2007.Skills;
 
 public class AntiBan {
 	
 	public String antiban_status;
 	public long antiban_performed;
 	public ABCUtil abc;
+	private long last_anti_ban_action;
+	private Skills.SKILLS hover_skill;
 	
     public AntiBan() {
+    	General.useAntiBanCompliance(true);
     	log("Starting antiban");
     	abc = new ABCUtil();
     	antiban_performed = 0;
     	antiban_status = "Waiting";
+    	last_anti_ban_action = 0;
+    }
+    
+    public void setHoverSkill(Skills.SKILLS skill) {
+    	this.hover_skill = skill;
+    }
+    
+    private boolean openGameTab(GameTab.TABS tab) {
+		if (GameTab.open(tab)) {
+            Timing.waitCondition(new Condition() {
+                @Override
+                public boolean active() {
+                    // control cpu usage
+                    General.sleep(150, 250);
+                    // ensure we have opened the tab
+                    return GameTab.getOpen() == tab;
+                }
+            }, General.random(1000, 2000));
+            
+            return true;
+		}
+		
+		return false;
     }
 	
     private boolean performTabAntiBan(long next, GameTab.TABS tab) {
     	
 		if (System.currentTimeMillis() >= next && GameTab.getOpen() != tab) {
 			log("Performing check tab anti ban");
-			if (GameTab.open(tab)) {
+			if (openGameTab(tab)) {
 				antiban_status = "Performing antiban action";
 				antiban_performed ++;
 				log("Successfully performed check tab "+"("+tab+") antiban");
@@ -43,17 +72,47 @@ public class AntiBan {
 	public void handleWait() {
     	antiban_status = "Checking";
     	
-    	if (Player.isMoving() || Player.getAnimation() != -1 && General.random(1, 100) >= 98) {
-    		checkGameTabAntiBan();
-    	} else if (General.random(1, 100) > 50) {
-    		checkMouseAntiBan();
-    	}
+    	if (Timing.timeFromMark(last_anti_ban_action) >= 180000) {
+    		
+    		if (GameTab.getOpen() != GameTab.TABS.STATS && this.hover_skill != null) {
+    			if (hoverSkill(this.hover_skill)) {
+    				resetTimer();
+    				return;
+    			};
+    		}
     	
-    	antiban_status = "Waiting";
+	    	if (Player.isMoving() || Player.getAnimation() != -1 && General.random(1, 100) == 100) {
+	    		checkGameTabAntiBan();
+	    	} else if (General.random(1, 100) > 50) {
+	    		checkMouseAntiBan();
+	    	}
+	    	
+	    	antiban_status = "Waiting";
+    	}
     }
 	
-	public void handleWalkingTimeout() {
+	public void resetTimer() {
+		last_anti_ban_action = Timing.currentTimeMillis();
+	}
+	
+	public boolean hoverSkill(Skills.SKILLS skill) {
+		if (openGameTab(GameTab.TABS.STATS)) {
+			if (skill.hover()) {
+	            Timing.waitCondition(new Condition() {
+	                @Override
+	                public boolean active() {
+	                    // control cpu usage
+	                    General.sleep(150, 250);
+	                    // ensure we have opened the tab
+	                    return GameTab.getOpen() == GameTab.TABS.STATS && skill.hover();
+	                }
+	            }, General.random(2000, 6000));
+	            
+				return true;
+			}
+		}
 		
+		return false;
 	}
 	
 	public void checkMouseAntiBan() {
@@ -86,6 +145,8 @@ public class AntiBan {
             log("Performing mouse right click anti ban");
             abc.performRandomRightClick();
         }
+        
+        resetTimer();
 	}
 	
 	public void checkGameTabAntiBan() {
@@ -123,5 +184,7 @@ public class AntiBan {
 	            };
 	            break;
 	    }
+        
+        resetTimer();
 	}
 }
