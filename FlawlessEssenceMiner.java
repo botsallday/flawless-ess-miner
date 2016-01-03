@@ -20,6 +20,8 @@ import org.tribot.api2007.Player;
 import org.tribot.api2007.Skills;
 import org.tribot.api2007.Walking;
 import org.tribot.api2007.Camera;
+import org.tribot.api2007.Constants;
+import org.tribot.api2007.Equipment;
 import org.tribot.api2007.ext.Filters;
 import org.tribot.api2007.ext.Filters.GroundItems;
 
@@ -48,19 +50,21 @@ public class FlawlessEssenceMiner extends Script implements Painting {
     private AntiBan anti_ban = new AntiBan();
     private Transportation transport = new Transportation();
     private Banker banker = new Banker();
-    private GUI gui = new GUI();
     private boolean has_pic = false;
     private static final long startTime = System.currentTimeMillis();
     private int essence_mined = 0;
     private int current_ess = 0;
     private RSObject target_rock;
     private boolean execute = true;
+    private String best_pickaxe;
+    private boolean has_checked_for_best_pickaxe;
     private final RenderingHints aa = new RenderingHints(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     Font font = new Font("Verdana", Font.BOLD, 14);
+    final int[] pickaxes = Constants.IDs.Items.pickaxes;
 
     private final RSArea bank_area = new RSArea(new RSTile(3251, 3420, 0), new RSTile(3254, 3422, 0));
     private final RSArea teleport_area = new RSArea(new RSTile(3252, 3401, 0), new RSTile(3254, 3402, 0));
-    private final RSTile exit_shop_tile = new RSTile(3253, 3498, 0);
+
     public boolean inventoryIsEmpty() {
         if (Inventory.getAll().length > 0) {
             return false;
@@ -69,28 +73,13 @@ public class FlawlessEssenceMiner extends Script implements Painting {
         return true;
     }
     
-    public Object getPickaxe() {
-        return gui.getPicaxeValue();
-    }
-    
     public void run() {
         General.useAntiBanCompliance(true);
-        gui.setVisible(true);
-        execute = false;
-        while (gui.getWaitGui()){
-            General.sleep(100, 150);
-            println("Sleeping for gui");
-        }
-        
-        println("Gui loaded");
-        
         execute = true;
         
-        gui.setVisible(false);
         anti_ban.setHoverSkill(Skills.SKILLS.MINING);
         
         while(execute) {
-            
             State state = state();
             if (state != null) {
                 switch (state) {
@@ -125,7 +114,6 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                                 }
                             } else {
                                 if (transport.validateWalk(portal[0].getPosition(), true)) {
-                                    println("DOOMED");
                                     Camera.turnToTile(portal[0].getPosition());
                                     WebWalking.walkTo(portal[0].getPosition());
                                 }
@@ -135,37 +123,20 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                     case WALK_TO_ROCKS:
                         log("Walking to rocks to mine ess");
                         final RSObject[] rocks = Objects.findNearest(20, Filters.Objects.actionsContains("Mine"));
-                        RSNPC[] portals = NPCs.getAll();
 
                         if (rocks.length > 0) {
-                            println("first one");
-                            Condition closeToRocks = new Condition() {
-                                @Override
-                                public boolean active() {
-                                    General.sleep(100);
-                                    return Objects.findNearest(7, Filters.Objects.actionsContains("Mine")).length > 0;
-                                }
-                            };
-                            if (portals.length > 0) {
-                                if (transport.walkCustomNavPath(portals[0].getPosition())) {
-                                    General.sleep(1000);
-                                    println("Won");
-                                } else {
-                                    if (Walking.walkPath(transport.nav().findPath(20), closeToRocks, 500)) {
-                                        println(" Found a win");
-                                    } else {
-                                        println("Another fail");
-                                    }
-                                };
+                            if (transport.nav().traverse(rocks[0].getPosition().distanceTo(Player.getPosition()))) {
+                                println(" Found a win");
+                            } else {
+                                println("Another fail");
                             }
                         } else {
-                            println("Second one");
-                            if (Walking.walkPath(transport.nav().findPath(5))) {
-                                General.sleep(1000);
-                                println("Win");
-                            } else {
-                                println("Fail");
-                            }
+                        	// if by chance we fail to walk to the rocks location, we will try to get in range of any rock
+                        	if (transport.nav().traverse(15)) {
+                        		println("Random pathed");
+                        	} else {
+                        		println("Failed random path");
+                        	}
                         }
                         break;
                     case WALK_TO_BANK:
@@ -177,10 +148,6 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                             println("Banking fails");
                         }
                         
-//                      if (Walking.walkPath(PathFinding.generatePath(Player.getPosition(), bank_area.getRandomTile(), false))) {
-//                          println("The path worked!");
-//                      };
-//                      banker.handleBanking(bank_area, true);
                         break;
                     case GET_PIC:
                         log("Attempting to get a pickaxe");
@@ -212,12 +179,17 @@ public class FlawlessEssenceMiner extends Script implements Painting {
 
     private State state() {
         RSNPC[] portals = NPCs.getAll();
-        // cache whether or not we have a pickaxe
-        if (Inventory.find(gui.getPicaxeValue()).length > 0) {
-            has_pic = true;
-        } else {
-            has_pic = false;
+        if (!has_checked_for_best_pickaxe && Banking.isInBank()) {
+        	getBestPickaxe();
+        } else if (!has_checked_for_best_pickaxe && isInMine() && !hasPickaxe()) {
+        	// it won't leave the mine to check if it has a pic
+        	return State.WALK_TO_PORTAL;
+        } else if (!has_checked_for_best_pickaxe && !isInMine() && !Banking.isInBank()) {
+        	return State.WALK_TO_BANK;
         }
+        
+        // cache whether or not we have a pickaxe
+        has_pic = hasPickaxe();
         // determine how much ess we have mined
         if (Inventory.find("Rune Essence", "Pure Essence").length > 0) {
             if (Inventory.getCount("Rune Essence", "Pure Essence") > current_ess) {
@@ -280,8 +252,13 @@ public class FlawlessEssenceMiner extends Script implements Painting {
         WALK_TO_PORTAL,
         WALKING,
         GET_PIC,
+        CHECK_FOR_BEST_PIC,
         ANTI_BAN
     }
+   
+   private boolean hasPickaxe(){
+		return Equipment.find(pickaxes).length==1||Inventory.find(pickaxes).length==1;
+	}
    
    private boolean tryTeleport() {
        RSNPC[] npc = NPCs.find("Aubury");
@@ -324,9 +301,9 @@ public class FlawlessEssenceMiner extends Script implements Painting {
    
     private boolean depositAll() {
         if (Inventory.isFull()) {
-            if (banker.depositAllBut(gui.getPicaxeValue())) {
+            if (banker.depositAllBut(getPickaxeValue())) {
                 // get pickaxe if needed
-                if (Inventory.find(gui.getPicaxeValue()).length == 0) {
+                if (Inventory.find(getPickaxeValue()).length == 0) {
                     getPic();
                 }
                 // condition to wait for getting the pick
@@ -336,7 +313,7 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                         // control cpu usage
                         General.sleep(100, 200);
                         // ensure we have deposited items
-                        return Inventory.find(gui.getPicaxeValue()).length > 0;
+                        return Inventory.find(getPickaxeValue()).length > 0;
                     }
                 }, General.random(500, 1550));
                 // update variables
@@ -357,17 +334,21 @@ public class FlawlessEssenceMiner extends Script implements Painting {
     }
     
     private void getPic() {
-        RSItem[] pic = Banking.find(gui.getPicaxeValue());
+        RSItem[] pic = Banking.find(getPickaxeValue());
         
         if (Banking.openBank()) {
             if (pic.length > 0) {
-                if (!Inventory.isFull() && Inventory.find(gui.getPicaxeValue()).length == 0) {
-                    Banking.withdraw(1, gui.getPicaxeValue());
+                if (!Inventory.isFull() && Inventory.find(getPickaxeValue()).length == 0) {
+                    Banking.withdraw(1, getPickaxeValue());
                 } else {
                     depositAll();
                 }
             }
         }
+    }
+    
+    private String getPickaxeValue() {
+    	return best_pickaxe;
     }
    
     private void closeBankScreen() {
@@ -395,6 +376,9 @@ public class FlawlessEssenceMiner extends Script implements Painting {
                 }
                 anti_ban.abc.BOOL_TRACKER.HOVER_NEXT.reset();
                 anti_ban.abc.BOOL_TRACKER.USE_CLOSEST.reset();
+            } else {
+            	// if the large ess rock is not on screen or we have trouble clicking it, walk to it.
+            	transport.nav().traverse(rock.getPosition().distanceTo(Player.getPosition()));
             }
         }
     }
@@ -420,6 +404,160 @@ public class FlawlessEssenceMiner extends Script implements Painting {
         g.drawString(""+ ess_per_hour, 160, 440);
         g.drawString(""+(essence_mined*13), 80, 463);
 
+    }
+    
+    public boolean isInMine() {
+    	
+    	RSObject[] ess = Objects.find(50, "Rune Essence");
+    	
+    	if (ess.length > 0) {
+    		return true;
+    	}
+    	return false;
+    }
+    
+    public void getBestPickaxe() {
+    	
+    	// ensure we are at the bank
+    	if (Banking.openBank()) {
+        	println("Getting best pickaxe");
+        	int level = Skills.getActualLevel(Skills.SKILLS.MINING);
+        	println("Mining level : "+level);
+        	equipBestPickaxe(level);
+        	has_checked_for_best_pickaxe = true;
+    	}
+    }
+    
+    public void equipBestPickaxe(int level) {
+    	if (level >= 0) {
+    		if (tryToFindPickaxe(bestUsablePickaxe(level))) {
+    			// we're done
+    			println("Found and equiped best pickaxe");
+    		} else {
+    			// we failed to get the best pic for our level, probably because we don't own it
+    			println("Dropping level by 10 to find a different pic");
+    			// as a last try attempt to get bronze pic
+    			if (level - 10 < 0) {
+    				equipBestPickaxe(0);
+    			} else if (level == 0) {
+    				execute = false;
+    				return;
+    			} else {
+    				// try to get a lower level pickaxe if we dont own the best one based on our level
+    				equipBestPickaxe(level - 10);
+    			}
+    		}
+    	} else {
+    		// we don't have a pickaxe that we can use!
+    		execute = false;
+    		println("No pickaxe that we meet the level requirements to use.");
+    	}
+    }
+    
+    public boolean tryToFindPickaxe(String pic) {
+    	if (hasPickaxeInInventory(pic)) {
+    		println("had the best pic in our inventory");
+    		return equipPickaxe(pic);
+    	}
+    	
+    	if (hasPickaxeEquiped(pic)) {
+    		println("Had the best pic equiped");
+    		return true;
+    	}
+    	
+    	if (hasPickaxeInBank(pic)) {
+    		println("had best pic in bank");
+    		if (Banking.withdraw(1, pic+" pickaxe")) {
+    			println("withdrew best pic from bank");
+			       Timing.waitCondition(new Condition() {
+			           @Override
+			           public boolean active() {
+			               // control cpu usage
+			               General.sleep(100);
+			               // ensure we have deposited items
+			               return hasPickaxeInInventory(pic);
+			           }
+			       }, General.random(3000, 5000));
+			       if (Banking.isBankScreenOpen()) {
+			    	   Banking.close();
+				       Timing.waitCondition(new Condition() {
+				           @Override
+				           public boolean active() {
+				               // control cpu usage
+				               General.sleep(100);
+				               // ensure we have deposited items
+				               return !Banking.isBankScreenOpen();
+				           }
+				       }, General.random(3000, 5000));
+			       }
+			       println("equip pic");
+			       return equipPickaxe(pic);
+    		};
+    	}
+    	
+    	return false;
+    }
+    
+    public boolean equipPickaxe(String pic) {
+    	RSItem[] pickaxe = Inventory.find(Filters.Items.nameContains(pic+" pic"));
+    	println("Attempting to equip pic");
+    	println(pic);
+    	if (pickaxe.length > 0) {
+    		println("Found pic in inventory to equip");
+    		sleep(2000);
+    		if (pickaxe[0].click("Wield")) {
+			       Timing.waitCondition(new Condition() {
+			           @Override
+			           public boolean active() {
+			               // control cpu usage
+			               General.sleep(100);
+			               // ensure we have deposited items
+			               return hasPickaxeEquiped(pic);
+			           }
+			       }, General.random(3000, 5000));
+			       best_pickaxe = pic;
+			       return true;
+    		}
+    	}
+    	
+    	return false;
+    }
+    
+    public boolean hasPickaxeInInventory(String pic) {
+    	return Inventory.find(Filters.Items.nameContains(pic+" pic")).length > 0;
+    }
+    
+    public boolean hasPickaxeInBank(String pic) {
+    	if (Banking.isBankScreenOpen()) {
+    		return Banking.find(Filters.Items.nameContains(pic+" pic")).length > 0;
+    	}
+    	
+    	return false;
+    }
+    
+    public boolean hasPickaxeEquiped(String pic) {
+    	return Equipment.isEquipped(Filters.Items.nameContains(pic+" pic"));
+    }
+    
+    public String bestUsablePickaxe(int level) {
+	   
+	   if (level > 60) {
+		   return "Dragon";
+	   } else if (level > 40) {
+			return "Rune";
+	   } else if (level > 30) {
+			return "Adamant";
+	   } else if (level > 20) {
+			return "Mithril";
+	   } else if (level > 10) {
+		  return "Black";
+	   } else if (level > 5) {
+			return "Steel";
+	   } else if (level > 0) {
+			return "Iron";
+	   }
+
+	   return "Bronze";
     }
     
     private Image getImage(String url) {
