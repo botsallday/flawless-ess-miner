@@ -1,4 +1,4 @@
-package scripts;
+package scripts.BADFlawlessEssenceMiner.framework.gui;
 
 @SuppressWarnings("serial")
 public class GUI extends javax.swing.JFrame {

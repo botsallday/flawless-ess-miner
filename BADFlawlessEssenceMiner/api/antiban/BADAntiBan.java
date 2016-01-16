@@ -1,4 +1,4 @@
-package scripts;
+package scripts.BADFlawlessEssenceMiner.api.antiban;
 
 import org.tribot.api.General;
 import org.tribot.api.Timing;
@@ -6,20 +6,22 @@ import org.tribot.api.types.generic.Condition;
 import org.tribot.api.util.ABCUtil;
 import org.tribot.api2007.Camera;
 import org.tribot.api2007.GameTab;
-import org.tribot.api2007.Player;
 import org.tribot.api2007.Skills;
 import org.tribot.api2007.types.RSNPC;
 
-public class AntiBan {
+@SuppressWarnings("deprecation")
+public class BADAntiBan {
 	
 	public String antiban_status;
 	public long antiban_performed;
+	@SuppressWarnings("deprecation")
 	public ABCUtil abc;
 	private long last_anti_ban_action;
 	private Skills.SKILLS hover_skill;
 	public boolean ignore_examine;
 	
-    public AntiBan() {
+    @SuppressWarnings("deprecation")
+	public BADAntiBan() {
     	General.useAntiBanCompliance(true);
     	log("Starting antiban");
     	abc = new ABCUtil();
@@ -69,7 +71,8 @@ public class AntiBan {
 		
     }
     
-    public boolean handleHoverNextNPC(RSNPC npc) {
+    @SuppressWarnings("deprecation")
+	public boolean handleHoverNextNPC(RSNPC npc) {
     	if (abc.BOOL_TRACKER.HOVER_NEXT.next()) {
     		if (!npc.isOnScreen()) {
     			Camera.turnToTile(npc);
@@ -83,7 +86,8 @@ public class AntiBan {
     	return false;
     }
     
-    public RSNPC handleUseClosest(RSNPC a, RSNPC b) {
+    @SuppressWarnings("deprecation")
+	public RSNPC handleUseClosest(RSNPC a, RSNPC b) {
     	
 		if (abc.BOOL_TRACKER.USE_CLOSEST.next()) {
 			if (b.getPosition().distanceTo(a.getPosition()) < 4) {
@@ -96,21 +100,24 @@ public class AntiBan {
     	
     }
     
-    public boolean handleItemInteractionDelay() {
+    @SuppressWarnings("deprecation")
+	public boolean handleItemInteractionDelay() {
     	// handle delay between interacting with multiple items
     	General.sleep(abc.DELAY_TRACKER.ITEM_INTERACTION.next());
     	abc.DELAY_TRACKER.ITEM_INTERACTION.reset();
     	return true;
     }
     
-    public boolean handleSwitchObjectCombatDelay() {
+    @SuppressWarnings("deprecation")
+	public boolean handleSwitchObjectCombatDelay() {
     	// handle waiting between fighting npcs
     	General.sleep(abc.DELAY_TRACKER.SWITCH_OBJECT_COMBAT.next());
     	abc.DELAY_TRACKER.SWITCH_OBJECT_COMBAT.reset();
     	return true;
     }
     
-    public boolean handleNewObjectCombatDelay() {
+    @SuppressWarnings("deprecation")
+	public boolean handleNewObjectCombatDelay() {
     	// handle waiting for a new object
     	General.sleep(abc.DELAY_TRACKER.NEW_OBJECT_COMBAT.next());
     	abc.DELAY_TRACKER.NEW_OBJECT_COMBAT.reset();
@@ -121,26 +128,11 @@ public class AntiBan {
     	System.out.println(string);
 	}
 
+	@SuppressWarnings("deprecation")
 	public void handleWait() {
     	antiban_status = "Checking";
-    	
-    	if (Timing.timeFromMark(last_anti_ban_action) >= 180000) {
-    		
-    		if (GameTab.getOpen() != GameTab.TABS.STATS && this.hover_skill != null) {
-    			if (hoverSkill(this.hover_skill)) {
-    				resetTimer();
-    				return;
-    			};
-    		}
-    	
-	    	if (Player.isMoving() || Player.getAnimation() != -1 && General.random(1, 100) == 100) {
-	    		checkGameTabAntiBan();
-	    	} else if (General.random(1, 100) > 50) {
-	    		checkMouseAntiBan();
-	    	}
-	    	
-	    	antiban_status = "Waiting";
-    	}
+		abc.performTimedActions(this.hover_skill);
+    	antiban_status = "Waiting";
     }
 	
 	public void resetTimer() {
@@ -165,78 +157,5 @@ public class AntiBan {
 		}
 		
 		return false;
-	}
-	
-	public void checkMouseAntiBan() {
-        if (System.currentTimeMillis() >= abc.TIME_TRACKER.EXAMINE_OBJECT.next() && !this.ignore_examine) {
-			log("Examine object antiban");
-			abc.performExamineObject();
-		}
-
-        if (System.currentTimeMillis() >= abc.TIME_TRACKER.ROTATE_CAMERA.next()) {
-            log("Performing rotate camera anti ban");
-            abc.performRotateCamera();
-        }
-
-        if (System.currentTimeMillis() >= abc.TIME_TRACKER.PICKUP_MOUSE.next()) {
-            log("Performing pickup mouse anti ban");
-            abc.performPickupMouse();
-        }
-
-        if (System.currentTimeMillis() >= abc.TIME_TRACKER.LEAVE_GAME.next()) {
-            log("Performing mouse leave game anti ban");
-            abc.performLeaveGame();
-        }
-
-        if (System.currentTimeMillis() >= abc.TIME_TRACKER.RANDOM_MOUSE_MOVEMENT.next()) {
-            log("Performing mouse movement anti ban");
-            abc.performRandomMouseMovement();
-        }
-
-        if (System.currentTimeMillis() >= abc.TIME_TRACKER.RANDOM_MOUSE_MOVEMENT.next()) {
-            log("Performing mouse right click anti ban");
-            abc.performRandomRightClick();
-        }
-        
-        resetTimer();
-	}
-	
-	public void checkGameTabAntiBan() {
-        switch (General.random(1, 5)) {
-	        case 1:
-	            if (performTabAntiBan(abc.TIME_TRACKER.CHECK_EQUIPMENT.next(), GameTab.TABS.EQUIPMENT)) {
-	                abc.TIME_TRACKER.CHECK_EQUIPMENT.reset();
-	            };
-	            break;
-	        case 2:
-	
-	            if (performTabAntiBan(abc.TIME_TRACKER.CHECK_FRIENDS.next(), GameTab.TABS.FRIENDS)) {
-	                abc.TIME_TRACKER.CHECK_FRIENDS.reset();
-	            };
-	            break;
-	
-	        case 3:
-	
-	            if (performTabAntiBan(abc.TIME_TRACKER.CHECK_COMBAT.next(), GameTab.TABS.COMBAT)) {
-	                abc.TIME_TRACKER.CHECK_COMBAT.reset();
-	            };
-	            break;
-	
-	        case 4:
-	
-	            if (performTabAntiBan(abc.TIME_TRACKER.CHECK_MUSIC.next(), GameTab.TABS.MUSIC)) {
-	                abc.TIME_TRACKER.CHECK_MUSIC.reset();
-	            };
-	            break;
-	
-	        case 5:
-	
-	            if (performTabAntiBan(abc.TIME_TRACKER.CHECK_QUESTS.next(), GameTab.TABS.QUESTS)) {
-	                abc.TIME_TRACKER.CHECK_QUESTS.reset();
-	            };
-	            break;
-	    }
-        
-        resetTimer();
 	}
 }

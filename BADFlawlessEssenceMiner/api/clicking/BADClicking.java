@@ -1,9 +1,8 @@
-package scripts;
+package scripts.BADFlawlessEssenceMiner.api.clicking;
 
 import org.tribot.api.DynamicClicking;
 import org.tribot.api.General;
 import org.tribot.api.Timing;
-import org.tribot.api.rs3.WebWalking;
 import org.tribot.api.types.generic.Condition;
 import org.tribot.api2007.Inventory;
 import org.tribot.api2007.Objects;
@@ -14,14 +13,21 @@ import org.tribot.api2007.types.RSItem;
 import org.tribot.api2007.types.RSItemDefinition;
 import org.tribot.api2007.types.RSObject;
 import org.tribot.api2007.Camera;
-import org.tribot.api2007.Game;
+import org.tribot.api2007.Equipment;
 import org.tribot.api2007.GroundItems;
 
 
-public class Clicking {
-	Clicking() {
-		
-	}
+public class BADClicking {
+	
+   public boolean actionsContainOption(String[] actions, String key) {
+	   for (int i = 0; i < actions.length; i++) {
+		   if (actions[i].contains(key)) {
+			   return true;
+		   }
+	   }
+	   
+	   return false;
+   }
 	
     public boolean collectAnimableObject(RSObject obj, String option) {
         if (!Inventory.isFull()) {
@@ -143,6 +149,10 @@ public class Clicking {
 	    return false;
 	}
 	
+	public RSObject[] nearestObjectByAction(String action, int dist) {
+		return Objects.findNearest(dist, Filters.Objects.actionsContains(action));
+	}
+	
 	public boolean useItemOnPlot(RSObject plot, RSItem[] obj) {
 		if (obj.length > 0) {
 			
@@ -175,6 +185,33 @@ public class Clicking {
 					return false;
 				}
 		}
+		
+		return false;
+	}
+	
+	public boolean hasItemEquipped(String item) {
+		return Equipment.isEquipped(Filters.Items.nameContains(item));
+	}
+	
+	public boolean equipItem(String item_name) {
+		
+    	RSItem[] item = Inventory.find(Filters.Items.nameContains(item_name));
+    	
+    	if (item.length > 0) {
+    		if (item[0].click("Wield")) {
+			       Timing.waitCondition(new Condition() {
+			           @Override
+			           public boolean active() {
+			               // control cpu usage
+			               General.sleep(100);
+			               // ensure we have deposited items
+			               return hasItemEquipped(item_name);
+			           }
+			       }, General.random(3000, 5000));
+			       return true;
+    		}
+    	}
+    	
 		
 		return false;
 	}

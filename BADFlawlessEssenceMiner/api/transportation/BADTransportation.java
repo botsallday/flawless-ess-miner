@@ -1,6 +1,7 @@
-package scripts;
+package scripts.BADFlawlessEssenceMiner.api.transportation;
 
 import org.tribot.api.General;
+import org.tribot.api.types.generic.Condition;
 import org.tribot.api2007.Camera;
 import org.tribot.api2007.Game;
 import org.tribot.api2007.NPCs;
@@ -15,13 +16,16 @@ import org.tribot.api2007.types.RSObject;
 import org.tribot.api2007.types.RSTile;
 import org.tribot.api2007.util.DPathNavigator;
 
-public class Transportation {
+import scripts.BADFlawlessEssenceMiner.api.antiban.BADAntiBan;
+
+
+public class BADTransportation {
 	
-	private AntiBan anti_ban;
+	private BADAntiBan anti_ban;
 	
 	
-	Transportation() {
-		anti_ban = new AntiBan();
+	public BADTransportation() {
+		anti_ban = new BADAntiBan();
 	}
 	
     public void checkRun() {
@@ -32,13 +36,8 @@ public class Transportation {
     	}
     }  
     
-    public RSTile getTile(RSArea area, boolean check_run) {
-    	// check run since we are about to walk
-    	if (check_run) {
-    		checkRun();
-    	}
-    	
-    	return area.getRandomTile();
+    public boolean walkPath(RSTile[] path) {
+    	return Walking.walkPath(path);
     }
     
     public RSArea getAreaFromCoords(int x_min, int x_max, int y_min, int y_max, int floor) {
@@ -52,22 +51,6 @@ public class Transportation {
     	};
     	
     	return false;
-    }
-    
-    public boolean blindWalkToObject(RSObject[] obj) {
-		if (obj[0].isOnScreen() && validateWalk(obj[0].getPosition(), true)) {
-			return Walking.blindWalkTo(obj[0].getPosition());
-		}
-		
-		return false;
-	}
-    
-    public boolean blindWalkToNpc(RSNPC[] npcs) {
-        if (npcs.length > 0 && validateWalk(npcs[0].getPosition(), false)) {
-            return Walking.blindWalkTo(npcs[0].getPosition());
-        }
-        
-        return false;
     }
 	
 	public void iteratePath(RSTile[] path) {
@@ -99,6 +82,10 @@ public class Transportation {
 	   
 	   return tile.translate(General.random(0, 1), General.random(0, 1));
 
+   }
+   
+   public boolean distanceBetween(int min, int max, RSTile tile) {
+	   return Player.getPosition().distanceTo(tile) < max && Player.getPosition().distanceTo(tile) > min;
    }
 	
 	public boolean reach(RSTile tile, boolean is_object) {
@@ -190,6 +177,15 @@ public class Transportation {
 	public boolean clickMinimapTile(RSTile tile) {
 		if (tile.isOnScreen()) {
 			return Walking.clickTileMM(tile, 0);
+		}
+		
+		return false;
+	}
+	
+	public boolean walkTo(RSTile[] path, Condition stopping_condition) {
+		
+		if (Walking.walkPath(path, stopping_condition, 100)) {
+			return true;
 		}
 		
 		return false;
