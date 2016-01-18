@@ -1,6 +1,5 @@
 package scripts.BADFlawlessEssenceMiner.framework.flawlessessenceminer;
 
-import org.tribot.script.Script;
 import org.tribot.api2007.types.RSNPC;
 import org.tribot.api2007.types.RSObject;
 import org.tribot.api.General;
@@ -24,7 +23,7 @@ import org.tribot.api2007.ext.Filters;
 import org.tribot.api2007.NPCs;
 import org.tribot.api2007.types.RSItem;
 
-public class FlawlessEssenceMinerCore extends Script {
+public class FlawlessEssenceMinerCore {
     // set variables
     private BADAntiBan ANTI_BAN = new BADAntiBan();
     private static String ESSENCE = "Rune Essence";
@@ -52,42 +51,11 @@ public class FlawlessEssenceMinerCore extends Script {
                     };
                     break;
                 case WALK_TO_PORTAL:
-                    RSNPC[] portal = NPCs.getAll();
-                    
-                    General.println("Walking to portal to leave ess mine");
-                    if (portal.length > 0) {
-                        if (portal[0].isOnScreen() && portal[0].isClickable()) {
-                            if (DynamicClicking.clickRSNPC(portal[0], "Use")) {
-                                Timing.waitCondition(BADConditions.objectIsNear(ESSENCE), General.random(4000, 8000));
-                            } else if (DynamicClicking.clickRSNPC(portal[0], "Exit")) {
-                                Timing.waitCondition(BADConditions.objectIsntNear(ESSENCE), General.random(4000, 8000));
-                            }
-                        } else {
-                            if (TRANSPORT.validateWalk(portal[0].getPosition(), true)) {
-                                Camera.turnToTile(portal[0].getPosition());
-                                WebWalking.walkTo(portal[0].getPosition());
-                            }
-                        }
-                    }
+                	walkToPortal();
                     break;
                 case WALK_TO_ROCKS:
                     General.println("Walking to rocks to mine ess");
-                    final RSObject[] rocks = Objects.findNearest(20, Filters.Objects.actionsContains("Mine"));
-
-                    if (rocks.length > 0) {
-                        if (TRANSPORT.nav().traverse(rocks[0].getPosition().distanceTo(Player.getPosition()))) {
-                            println(" Found a win");
-                        } else {
-                            println("Another fail");
-                        }
-                    } else {
-                    	// if by chance we fail to walk to the rocks location, we will try to get in range of any rock
-                    	if (TRANSPORT.nav().traverse(15)) {
-                    		println("Random pathed");
-                    	} else {
-                    		println("Failed random path");
-                    	}
-                    }
+                    walkToRocks();
                     break;
                 case WALK_TO_BANK:
                     General.println("Walking to bank");
@@ -108,6 +76,8 @@ public class FlawlessEssenceMinerCore extends Script {
                     ANTI_BAN.handleWait();
                     break;
                 case ANTI_BAN:
+                	// see if we should hover the portal
+                	checkHoverNext();
                     ANTI_BAN.handleWait();
                     break;
                 case SOMETHING_WENT_WRONG:
@@ -195,6 +165,46 @@ public class FlawlessEssenceMinerCore extends Script {
         ANTI_BAN
     }
    
+   private void checkHoverNext() {
+		if (!Player.isMoving()) {
+			if (Inventory.getCount("Pure essence", "Rune essence") > 23) {
+				if (ANTI_BAN.abc.BOOL_TRACKER.HOVER_NEXT.next()) {
+					tryHoverPortal();
+				}
+			}
+		}
+   }
+   
+   private void walkToPortal() {
+       RSNPC[] portal = NPCs.getAll();
+       
+       General.println("Walking to portal to leave ess mine");
+       if (portal.length > 0) {
+           if (portal[0].isOnScreen() && portal[0].isClickable()) {
+               if (DynamicClicking.clickRSNPC(portal[0], "Use")) {
+                   Timing.waitCondition(BADConditions.objectIsNear(ESSENCE), General.random(4000, 8000));
+               } else if (DynamicClicking.clickRSNPC(portal[0], "Exit")) {
+                   Timing.waitCondition(BADConditions.objectIsntNear(ESSENCE), General.random(4000, 8000));
+               }
+           } else {
+               if (TRANSPORT.validateWalk(portal[0].getPosition(), true)) {
+                   Camera.turnToTile(portal[0].getPosition());
+                   WebWalking.walkTo(portal[0].getPosition());
+               }
+           }
+       }
+   }
+   private void tryHoverPortal() {
+	     RSNPC[] portal = NPCs.getAll();
+         
+         General.println("Walking to portal to leave ess mine");
+         if (portal.length > 0) {
+             if (portal[0].isOnScreen() && portal[0].isClickable() && portal[0].hover()) {
+            	 ANTI_BAN.abc.BOOL_TRACKER.HOVER_NEXT.reset();
+             } 
+         }
+   }
+   
    private boolean hasPickaxe(){
 		return Equipment.find(PICKAXES).length==1||Inventory.find(PICKAXES).length==1;
 	}
@@ -234,6 +244,25 @@ public class FlawlessEssenceMinerCore extends Script {
         
         return false;
 
+   }
+   
+   private void walkToRocks() {
+       final RSObject[] rocks = Objects.findNearest(20, Filters.Objects.actionsContains("Mine"));
+
+       if (rocks.length > 0) {
+	           if (TRANSPORT.nav().traverse(rocks[0].getPosition().distanceTo(Player.getPosition()))) {
+	               General.println(" Found a win");
+	           } else {
+	               General.println("Another fail");
+	           }
+       } else {
+	       	// if by chance we fail to walk to the rocks location, we will try to get in range of any rock
+	       	if (TRANSPORT.nav().traverse(15)) {
+	       		General.println("Random pathed");
+	       	} else {
+	       		General.println("Failed random path");
+	       	}
+       }
    }
    
     private boolean depositAll() {
@@ -318,9 +347,9 @@ public class FlawlessEssenceMinerCore extends Script {
     	// ensure we are at the bank
     	if (Banking.openBank()) {
     		Timing.waitCondition(BADConditions.BANK_OPEN, 3000);
-        	println("Getting best pickaxe");
+        	General.println("Getting best pickaxe");
         	int level = Skills.getActualLevel(Skills.SKILLS.MINING);
-        	println("Mining level : "+level);
+        	General.println("Mining level : "+level);
         	equipBestPickaxe(level);
         	has_checked_for_best_pickaxe = true;
     	}
@@ -330,10 +359,10 @@ public class FlawlessEssenceMinerCore extends Script {
     	if (level >= 0) {
     		if (tryToFindPickaxe(bestUsablePickaxe(level))) {
     			// we're done
-    			println("Found and equiped best pickaxe");
+    			General.println("Found and equiped best pickaxe");
     		} else {
     			// we failed to get the best pic for our level, probably because we don't own it
-    			println("Dropping level by 10 to find a different pic");
+    			General.println("Dropping level by 10 to find a different pic");
     			// as a last try attempt to get bronze pic
     			if (level - 10 < 0) {
     				equipBestPickaxe(0);
@@ -348,31 +377,31 @@ public class FlawlessEssenceMinerCore extends Script {
     	} else {
     		// we don't have a pickaxe that we can use!
     		execute = false;
-    		println("No pickaxe that we meet the level requirements to use.");
+    		General.println("No pickaxe that we meet the level requirements to use.");
     	}
     }
     
     public boolean tryToFindPickaxe(String pic) {
     	if (hasPickaxeInInventory(pic)) {
-    		println("had the best pic in our inventory");
+    		General.println("had the best pic in our inventory");
     		return equipPickaxe(pic);
     	}
     	
     	if (hasPickaxeEquiped(pic)) {
-    		println("Had the best pic equiped");
+    		General.println("Had the best pic equiped");
     		return true;
     	}
     	
     	if (hasPickaxeInBank(pic)) {
-    		println("had best pic in bank");
+    		General.println("had best pic in bank");
     		if (Banking.withdraw(1, pic+" pickaxe")) {
-    			println("withdrew best pic from bank");
+    			General.println("withdrew best pic from bank");
 			       Timing.waitCondition(BADConditions.hasItem(pic), General.random(3000, 5000));
 			       if (Banking.isBankScreenOpen()) {
 			    	   Banking.close();
 				       Timing.waitCondition(BADConditions.bankScreenIsClosed(), General.random(3000, 5000));
 			       }
-			       println("equip pic");
+			       General.println("equip pic");
 			       return equipPickaxe(pic);
     		};
     	}
@@ -382,10 +411,10 @@ public class FlawlessEssenceMinerCore extends Script {
     
     public boolean equipPickaxe(String pic) {
     	RSItem[] pickaxe = Inventory.find(Filters.Items.nameContains(pic+" pic"));
-    	println("Attempting to equip pic");
-    	println(pic);
+    	General.println("Attempting to equip pic");
+    	General.println(pic);
     	if (pickaxe.length > 0) {
-    		println("Found pic in inventory to equip");
+    		General.println("Found pic in inventory to equip");
     		if (pickaxe[0].click("Wield")) {
 			       Timing.waitCondition(BADConditions.hasItemEquipped(pic+" pic"), General.random(3000, 5000));
 			       best_pickaxe = pic;
@@ -435,15 +464,15 @@ public class FlawlessEssenceMinerCore extends Script {
     
     public void getToBank() {
         if (TRANSPORT.walkCustomNavPath(BADAreas.VARROCK_EAST_BANK_AREA.getRandomTile())) {
-            println("Banking works");
+            General.println("Banking works");
         } else {
-            println("Banking fails");
-            BANKER.walkToBank(BADAreas.VARROCK_EAST_BANK_AREA, true);
+            General.println("Banking fails");
+            TRANSPORT.nav().findPath(BADAreas.VARROCK_EAST_BANK_AREA.getRandomTile());
         }
         
         if (Banking.isInBank() && !Banking.isBankScreenOpen()) {
         	if (Banking.openBank() && Timing.waitCondition(BADConditions.BANK_OPEN, 3500)) {
-        		println("Opened bank");
+        		General.println("Opened bank");
         	}
         }
     }
